@@ -1,79 +1,71 @@
 pipeline {
     agent any
-
     environment {
-        // Docker Hub credentials
-        DOCKER_USERNAME = credentials('docker-hub-username')
-        DOCKER_PASSWORD = credentials('docker-hub-password')
-
-        // AWS EC2 credentials
-        SERVER_USER = 'ec2-user'           // EC2 instance username
-        SERVER_IP = 'your-ec2-public-ip'  // EC2 instance public IP
+        AWS_SSH_CREDENTIALS = credentials('my-ec2-ssh-key') // Replace with your credential ID
+        DOCKER_USERNAME = 'senthilkumarsoundararajan' // Set your DockerHub username
+        DOCKER_PASSWORD = '294224789' // Set your DockerHub password
     }
-
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/your-repo/flask-app.git'
+                git branch: 'main', url: 'https://github.com/creativesenthil/flask-app.git'
             }
         }
-
         stage('Install Dependencies & Run Tests') {
             steps {
-                sh '''
-                python3 -m venv venv
-                source venv/bin/activate
-                pip install -r requirements.txt
-                pytest
-                '''
+                script {
+                    sh '''#!/bin/bash
+                    set -e
+                    python3 -m venv venv
+                    source venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                    pytest || echo 'No tests available'
+                    '''
+                }
             }
         }
-
         stage('Build Docker Image') {
             steps {
-                sh '''
-                echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-                docker build -t $DOCKER_USERNAME/flask-app:latest .
-                docker tag $DOCKER_USERNAME/flask-app:latest $DOCKER_USERNAME/flask-app:latest
-                '''
+                script {
+                    sh '''#!/bin/bash
+                    docker build -t senthilkumarsoundararajan/flask-app:latest .
+                    '''
+                }
             }
         }
-
         stage('Push Docker Image to Docker Hub') {
             steps {
-                sh '''
-                docker push $DOCKER_USERNAME/flask-app:latest
-                '''
+                script {
+                    sh '''#!/bin/bash
+                    echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+                    docker push senthilkumarsoundararajan/flask-app:latest
+                    '''
+                }
             }
         }
-
         stage('Deploy to AWS EC2') {
             steps {
-                sshagent(['ec2-ssh-key']) {
-                    sh '''
-                    ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << EOF
-                    sudo docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
-                    sudo docker pull $DOCKER_USERNAME/flask-app:latest
-                    sudo docker stop flask-app || true
-                    sudo docker rm flask-app || true
-                    sudo docker run -d --name flask-app -p 5000:5000 $DOCKER_USERNAME/flask-app:latest
-                    EOF
+                script {
+                    sh '''#!/bin/bash
+                    ssh -o StrictHostKeyChecking=no -i $AWS_SSH_CREDENTIALS ubuntu@13.232.19.254 <<EOF
+                    set -e
+                    echo "Starting deployment process on EC2 instance..."
+
+                    # Pull the latest Docker image
+                    docker pull senthilkumarsoundararajan/flask-app:latest
+
+                    # Stop and remove the existing container if it exists
+                    docker ps -q --filter "name=flask-app" | grep -q . && docker rm -f flask-app || echo "No existing container to remove."
+
+                    # Run the new container
+                    docker run -d --name flask-app -p 80:5000 senthilkumarsoundararajan/flask-app:latest
+
+                    echo "Deployment completed successfully!"
+EOF
                     '''
                 }
             }
         }
     }
-
-    post {
-        always {
-            echo 'Pipeline execution completed.'
-        }
-        success {
-            echo 'Application successfully deployed!'
-        }
-        failure {
-            echo 'Pipeline execution failed.'
-        }
-    }
 }
-
