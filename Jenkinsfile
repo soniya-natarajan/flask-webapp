@@ -2,41 +2,39 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'ap-south-1'
-        AWS_ACCOUNT_ID = '145023120684'
-        ECR_REPO = 'my-web-app'
-        IMAGE_TAG = 'latest'
+        AWS_REGION = 'us-east-1'
+        ECR_REPO = '145023120684.dkr.ecr.us-east-1.amazonaws.com/my-web-app'
+        IMAGE_TAG = "latest"
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/soniya-natarajan/flask-webapp.git'
-            }
-        }
-
-        stage('Login to AWS ECR') {
-            steps {
-                script {
-                    sh '''
-                    aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 145023120684.dkr.ecr.ap-south-1.amazonaws.com
-                    '''
-                }
+                git 'https://github.com/soniya-natarajan/flask-webapp.git'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t $ECR_REPO ."
+                sh '''
+                docker build -t $ECR_REPO:$IMAGE_TAG .
+                '''
             }
         }
 
-        stage('Tag & Push Docker Image to ECR') {
+        stage('Login to AWS ECR') {
             steps {
-                sh """
-                docker tag $ECR_REPO:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
-                docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
-                """
+                sh '''
+                aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
+                '''
+            }
+        }
+
+        stage('Push Image to ECR') {
+            steps {
+                sh '''
+                docker push $ECR_REPO:$IMAGE_TAG
+                '''
             }
         }
     }
