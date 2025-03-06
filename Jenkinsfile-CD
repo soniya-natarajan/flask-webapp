@@ -2,36 +2,25 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'ap-south-1'
-        AWS_ACCOUNT_ID = '145023120684'
-        ECR_REPO = 'my-web-app'
-        IMAGE_TAG = 'latest'
-        KUBE_CONFIG_PATH = '/var/lib/jenkins/.kube/config'
+        AWS_REGION = 'us-east-1'
+        CLUSTER_NAME = 'my-cluster'
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Configure kubectl for EKS') {
             steps {
-                git branch: 'main', url: 'https://github.com/soniya-natarajan/flask-webapp.git'
-            }
-        }
-
-        stage('Configure AWS Credentials') {
-            steps {
-                script {
-                    sh """
-                    aws eks update-kubeconfig --name my-cluster --region $AWS_REGION
-                    """
-                }
+                sh '''
+                aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
+                '''
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh """
-                kubectl apply -f k8s/deployment.yaml
-                kubectl apply -f k8s/service.yaml
-                """
+                sh '''
+                kubectl apply -f deployment.yaml
+                kubectl apply -f service.yaml
+                '''
             }
         }
     }
